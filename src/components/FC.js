@@ -1,10 +1,9 @@
-export class FormConstructor {
+export class FC {
   constructor(arg1, arg2) {
     let name, fields, options;
 
     if (typeof arg1 === 'object') {
       fields = Object.entries(arg1).map(([key, value]) => ({name: key, alias: key, id: key, value: value, initial: value}));
-      console.log(fields)
       name = arg2.name;
       options = arg2.options;
       let rules = arg2.rules;
@@ -14,6 +13,7 @@ export class FormConstructor {
           if (field_rules) {
             return {...item, rules: field_rules}
           }
+          return item;
         })
       }
     } else {
@@ -25,11 +25,14 @@ export class FormConstructor {
     let {validate_on_init} = options || {};
     this._name = name;
     if (Array.isArray(fields)) {
+      
       let list_of_fields = fields.map(
         f => new FormField({...f, _parentForm: this})
       );
+      
+      
       list_of_fields.map(
-        f => this[f.name] = f
+        f => this[f.name || f.alias || f.id] = f
       );
       this._fields = list_of_fields;
     }
@@ -39,10 +42,68 @@ export class FormConstructor {
     return this;
   }
 
+  getFields() {
+    return this._fields;
+  }
+
+  addField(field) {
+    let name = field.name || field.alias || field.id;
+    let name_collision = !!this._fields.find(f => f.name === name);
+    if (name_collision) {
+      console.error(`Поле ${name} уже существует`)
+      return;
+    }
+    let new_field = new FormField(field);
+    this[name] = new_field;
+    this._fields.push(new_field)
+  }
+
+  get _invalid() {
+    
+    return this._fields.some(field => field.invalid);
+  }
+
+  get _dirty() {
+    return this._fields.some(field => field.dirty);
+  }
+
+  get _some_touched() {
+    return this._fields.some(field => field.touched);
+  }
+
+  get _all_touched() {
+    return this._fields.every(field => field.touched);
+  }
+
+  get _active() {
+    return this._fields.some(field => field.active);
+  }
+
+  get _some_visited() {
+    return this._fields.some(field => field.visited);
+  }
+
+  get _all_visited() {
+    return this._fields.every(field => field.visited);
+  }
+
+  get meta() {
+    return {
+      invalid: this._invalid,
+      dirty: this._dirty,
+      some_touched: this._some_touched,
+      all_touched: this._all_touched,
+      some_visited: this._some_visited,
+      all_visited: this._all_visited,
+      active: this._active,
+    }
+  } 
+
   getValues() {
     return this._fields.reduce((acc, item) => {
       let key = item.alias || item.id || item.name;
-      if (typeof key !== 'string' || typeof key !== 'number') {
+      console.log(typeof key)
+      if (typeof key !== 'string' && typeof key !== 'number') {
         console.error(`Недопустимое значение alias || id || name`, item)
         return acc;
       } 
@@ -59,8 +120,8 @@ export class FormConstructor {
 
   validate() {
     this._fields.forEach(item => item.validate());
-    let invalid_fields = this._fields.filter(item => item.initial);
-    if (invalid_fields.lenght > 0) {
+    let invalid_fields = this._fields.filter(item => item.invalid);
+    if (invalid_fields.length > 0) {
       return false;
     }
     return true
@@ -120,12 +181,23 @@ export class FormField {
     
   }
 
+
   validate = () => {
     let error = this.rules.map(rule => {
-      if (typeof rule.validator === 'function') {
-        return !rule.validator(this.value, this.form) ? rule.message : undefined;
+      let _rule;
+      if (typeof rule === 'function') {
+        _rule = rule();
+      } else {
+        _rule = rule;
       }
-      return undefined;
+
+       // Обязательно должна быть функция validator в объекте
+      if (!_rule && typeof _rule.validator !== 'function') {
+        console.error('validator должен быть функцией', _rule)
+        return undefined;
+      }
+      return !_rule.validator(this.value, this.form) ? _rule.message || true : undefined;
+
     }).find(Boolean)
     
     this.error = error;

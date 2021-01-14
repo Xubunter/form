@@ -7,7 +7,7 @@
   </div>
 </template>
 <script>
-import {FormField} from "./formConstructor";
+import {FormField} from "./FC";
 export default {
   name: "input-wrapper",
   props: {
